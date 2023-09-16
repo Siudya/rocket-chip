@@ -369,6 +369,7 @@ class TLEdgeOut(
     a.mask    := mask(toAddress, lgSize)
     a.data    := 0.U
     a.corrupt := false.B
+    a.user    := DontCare
     (legal, a)
   }
 
@@ -636,6 +637,8 @@ class TLEdgeIn(
     d.denied  := denied
     d.data    := 0.U
     d.corrupt := false.B
+    d.echo := DontCare
+    d.user := DontCare
     d
   }
 
@@ -650,6 +653,8 @@ class TLEdgeIn(
     d.denied  := denied
     d.data    := data
     d.corrupt := corrupt
+    d.echo := DontCare
+    d.user := DontCare
     d
   }
 
@@ -664,6 +669,8 @@ class TLEdgeIn(
     d.denied  := denied
     d.data    := 0.U
     d.corrupt := false.B
+    d.echo := DontCare
+    d.user := DontCare
     d
   }
 
