@@ -10,7 +10,7 @@ trait HasChisel
 
   def chiselPluginJar: T[Option[PathRef]]
 
-  override def scalacOptions = T(super.scalacOptions() ++ chiselPluginJar().map(path => s"-Xplugin:${path.path}"))
+  override def scalacOptions = T(super.scalacOptions() ++ chiselPluginJar().map(path => s"-Xplugin:${path.path}") :+ "-Ymacro-annotations" )
 
   override def scalacPluginClasspath: T[Agg[PathRef]] = T(super.scalacPluginClasspath() ++ chiselPluginJar())
 

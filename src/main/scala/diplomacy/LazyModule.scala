@@ -6,11 +6,16 @@ import chisel3._
 import chisel3.internal.sourceinfo.{SourceInfo, UnlocatableSourceInfo}
 import chisel3.{Module, RawModule, Reset, withClockAndReset}
 import chisel3.experimental.{ChiselAnnotation, CloneModuleAsRecord}
+import chisel3.experimental.hierarchy.IsLookupable
 import firrtl.passes.InlineAnnotation
 import org.chipsalliance.cde.config.Parameters
 
 import scala.collection.immutable.{SeqMap, SortedMap}
 import scala.util.matching._
+
+/** Used for [[LazyHardenModule]] to record names in children nodes. When generation GraphML, these name will spread
+ * through all children nodes instead of using module information.*/
+case class NameTreeNode(children:Seq[NameTreeNode], moduleName:String, pathName:String)
 
 /** While the [[freechips.rocketchip.diplomacy]] package allows fairly abstract parameter negotiation while constructing a DAG,
   * [[LazyModule]] builds on top of the DAG annotated with the negotiated parameters and leverage's Scala's lazy evaluation property to split Chisel module generation into two phases:
@@ -83,17 +88,26 @@ abstract class LazyModule()(implicit val p: Parameters) {
   /** Return source line that defines this instance. */
   def line: String = sourceLine(info)
 
-  // Accessing these names can only be done after circuit elaboration!
-  /** Module name in verilog, used in GraphML.
-    * For cloned lazyModules, this is the name of the prototype
-    */
-  lazy val moduleName: String = cloneProto.map(_.module.name).getOrElse(module.name)
-  /** Hierarchical path of this instance, used in GraphML.
-    * For cloned modules, construct this manually (since this.module should not be evaluated)
-    */
-  lazy val pathName: String = cloneProto.map(p => s"${parent.get.pathName}.${p.instanceName}")
+  /** Indicating if this module is part of a harden module. */
+  protected[diplomacy] val isHardenedModule:Boolean = if(parent.isDefined) parent.get.isHardenedModule else false
+  /** Indicating if names has been spread to this module. */
+  protected[diplomacy] var isNamed:Boolean = false
+  /** The module name of a hardened module, which shoule be update when name spreading. */
+  protected[diplomacy] var hardenModuleName: String = ""
+  /** The path name of a hardened module, which shoule be update when name spreading. */
+  protected[diplomacy] var hardenPathName: String = ""
+  /** The real module name of a path module. */
+  protected[diplomacy] lazy val genericModuleName: String = cloneProto.map(_.module.name).getOrElse(module.name)
+  /** The real path name of a path module, relative to hardened top module. */
+  protected[diplomacy] lazy val genericPathName: String = cloneProto.map(p => s"${parent.get.pathName}.${p.instanceName}")
     .getOrElse(module.pathName)
-
+  // Accessing these names can only be done after circuit elaboration!
+  /** Module name in verilog, used in GraphML. */
+  /** For an hardened module, its module must not be accessed. Names of it should be precomputed.*/
+  /** When this module is part of a harden module, module name may not be the same with that in RTL.*/
+  def moduleName: String = if(isHardenedModule && isNamed) hardenModuleName else genericModuleName
+  /** Hierarchical path of this instance, used in GraphML. */
+  def pathName: String = if(isHardenedModule && isNamed) hardenPathName else genericPathName
   /** Instance name in verilog. Should only be accessed after circuit elaboration. */
   lazy val instanceName: String = pathName.split('.').last
 
@@ -283,7 +297,7 @@ object LazyModule {
   *
   * This is the actual Chisel module that is lazily-evaluated in the second phase of Diplomacy.
   */
-sealed trait LazyModuleImpLike extends RawModule {
+trait LazyModuleImpLike extends RawModule {
   /** [[LazyModule]] that contains this instance. */
   val wrapper: LazyModule
   /** IOs that will be automatically "punched" for this instance. */
@@ -309,32 +323,38 @@ sealed trait LazyModuleImpLike extends RawModule {
     // 2. return [[Dangle]]s from each module.
     val childDangles = wrapper.children.reverse.flatMap { c =>
       implicit val sourceInfo: SourceInfo = c.info
-      c.cloneProto.map { cp =>
-        // If the child is a clone, then recursively set cloneProto of its children as well
-        def assignCloneProtos(bases: Seq[LazyModule], clones: Seq[LazyModule]): Unit = {
-          require(bases.size == clones.size)
-          (bases zip clones).map { case (l,r) =>
-            require(l.getClass == r.getClass, s"Cloned children class mismatch ${l.name} != ${r.name}")
-            l.cloneProto = Some(r)
-            assignCloneProtos(l.children, r.children)
+      c match {
+        case m:LazyHardenModule[LazyHardenModuleImpLike] =>
+          m.genDangles()
+        case _ => {
+          c.cloneProto.map { cp =>
+            // If the child is a clone, then recursively set cloneProto of its children as well
+            def assignCloneProtos(bases: Seq[LazyModule], clones: Seq[LazyModule]): Unit = {
+              require(bases.size == clones.size)
+              (bases zip clones).map { case (l,r) =>
+                require(l.getClass == r.getClass, s"Cloned children class mismatch ${l.name} != ${r.name}")
+                l.cloneProto = Some(r)
+                assignCloneProtos(l.children, r.children)
+              }
+            }
+            assignCloneProtos(c.children, cp.children)
+            // Clone the child module as a record, and get its [[AutoBundle]]
+            val clone = CloneModuleAsRecord(cp.module).suggestName(c.suggestedName)
+            val clonedAuto = clone("auto").asInstanceOf[AutoBundle]
+            // Get the empty [[Dangle]]'s of the cloned child
+            val rawDangles = c.cloneDangles()
+            require(rawDangles.size == clonedAuto.elements.size)
+            // Assign the [[AutoBundle]] fields of the cloned record to the empty [[Dangle]]'s
+            val dangles = (rawDangles zip clonedAuto.elements).map { case (d, (_, io)) =>
+              d.copy(dataOpt = Some(io))
+            }
+            dangles
+          } .getOrElse {
+            // For non-clones, instantiate the child module
+            val mod = Module(c.module)
+            mod.dangles
           }
         }
-        assignCloneProtos(c.children, cp.children)
-        // Clone the child module as a record, and get its [[AutoBundle]]
-        val clone = CloneModuleAsRecord(cp.module).suggestName(c.suggestedName)
-        val clonedAuto = clone("auto").asInstanceOf[AutoBundle]
-        // Get the empty [[Dangle]]'s of the cloned child
-        val rawDangles = c.cloneDangles()
-        require(rawDangles.size == clonedAuto.elements.size)
-        // Assign the [[AutoBundle]] fields of the cloned record to the empty [[Dangle]]'s
-        val dangles = (rawDangles zip clonedAuto.elements).map { case (d, (_, io)) =>
-          d.copy(dataOpt = Some(io))
-        }
-        dangles
-      } .getOrElse {
-        // For non-clones, instantiate the child module
-        val mod = Module(c.module)
-        mod.dangles
       }
     }
 
@@ -538,7 +558,7 @@ case class HalfEdge(serial: Int, index: Int) extends Ordered[HalfEdge] {
   * @param flipped flip or not in [[AutoBundle.makeElements]]. If true this corresponds to `danglesOut`, if false it corresponds to `danglesIn`.
   * @param dataOpt actual [[Data]] for the hardware connection. Can be empty if this belongs to a cloned module
   */
-case class Dangle(source: HalfEdge, sink: HalfEdge, flipped: Boolean, name: String, dataOpt: Option[Data]) {
+case class Dangle(source: HalfEdge, sink: HalfEdge, flipped: Boolean, name: String, dataOpt: Option[Data]) extends IsLookupable{
   def data = dataOpt.get
 }
 
