@@ -12,11 +12,11 @@ import freechips.rocketchip.util._
 object ForceFanout
 {
   def apply[T](
-    a: TriStateValue = TriStateValue.unset,
-    b: TriStateValue = TriStateValue.unset,
-    c: TriStateValue = TriStateValue.unset,
-    d: TriStateValue = TriStateValue.unset,
-    e: TriStateValue = TriStateValue.unset)(body: Parameters => T)(implicit p: Parameters) =
+                a: TriStateValue = TriStateValue.unset,
+                b: TriStateValue = TriStateValue.unset,
+                c: TriStateValue = TriStateValue.unset,
+                d: TriStateValue = TriStateValue.unset,
+                e: TriStateValue = TriStateValue.unset)(body: Parameters => T)(implicit p: Parameters) =
   {
     body(p.alterPartial {
       case ForceFanoutKey => p(ForceFanoutKey) match {
@@ -118,7 +118,7 @@ object TLXbar
       cp.client.clients.exists { c => mp.manager.managers.exists { m =>
         c.visibility.exists { ca => m.address.exists { ma =>
           ca.overlaps(ma)}}}}
-      }.toVector}.toVector
+    }.toVector}.toVector
     val probeIO = (edgesIn zip reachableIO).map { case (cp, reachableO) =>
       (edgesOut zip reachableO).map { case (mp, reachable) =>
         reachable && cp.client.anySupportProbe && mp.manager.managers.exists(_.regionType >= RegionType.TRACKED)
@@ -151,6 +151,24 @@ object TLXbar
     // Handle size = 1 gracefully (Chisel3 empty range is broken)
     def trim(id: UInt, size: Int): UInt = if (size <= 1) 0.U else id(log2Ceil(size)-1, 0)
 
+    def customBundleConn_0(sink:BundleMap, source:BundleMap):Unit = {
+      for((name, sig) <- source.elements){
+        if(sink.elements.contains(name)){
+          sink.elements(name) := sig
+        }
+      }
+    }
+
+    def customBundleConn_1(sink: BundleMap, source: BundleMap): Unit = {
+      for ((name, sig) <- sink.elements) {
+        if(source.elements.contains(name)){
+          sig := source.elements(name)
+        } else {
+          sig := DontCare
+        }
+      }
+    }
+
     // Transform input bundle sources (sinks use global namespace on both sides)
     val in = Wire(Vec(io_in.size, TLBundle(wide_bundle)))
     for (i <- 0 until in.size) {
@@ -158,7 +176,7 @@ object TLXbar
 
       if (connectAIO(i).exists(x=>x)) {
         in(i).a.squeezeAll.waiveAll :<>= io_in(i).a.squeezeAll.waiveAll
-        in(i).a.bits.user := DontCare
+        customBundleConn_1(in(i).a.bits.user, io_in(i).a.bits.user)
         in(i).a.bits.echo := DontCare
         in(i).a.bits.source := io_in(i).a.bits.source | r.start.U
       } else {
@@ -180,7 +198,7 @@ object TLXbar
 
       if (connectCIO(i).exists(x=>x)) {
         in(i).c.squeezeAll.waiveAll :<>= io_in(i).c.squeezeAll.waiveAll
-        in(i).c.bits.user := DontCare
+        customBundleConn_1(in(i).c.bits.user, io_in(i).c.bits.user)
         in(i).c.bits.source := io_in(i).c.bits.source | r.start.U
       } else {
         in(i).c := DontCare
@@ -216,7 +234,7 @@ object TLXbar
 
       if (connectAOI(o).exists(x=>x)) {
         io_out(o).a.squeezeAll.waiveAll :<>= out(o).a.squeezeAll.waiveAll
-        out(o).a.bits.user := DontCare
+        customBundleConn_0(io_out(o).a.bits.user, out(o).a.bits.user)
       } else {
         out(o).a := DontCare
         io_out(o).a := DontCare
@@ -235,7 +253,7 @@ object TLXbar
 
       if (connectCOI(o).exists(x=>x)) {
         io_out(o).c.squeezeAll.waiveAll :<>= out(o).c.squeezeAll.waiveAll
-        out(o).c.bits.user := DontCare
+        customBundleConn_0(io_out(o).c.bits.user, out(o).c.bits.user)
       } else {
         out(o).c  := DontCare
         io_out(o).c  := DontCare
