@@ -159,10 +159,10 @@ class TLPLIC(params: PLICParams, beatBytes: Int)(implicit p: Parameters) extends
 
     val prioBits = log2Ceil(nPriorities+1)
     val priority =
-      if (nPriorities > 0) Reg(Vec(nDevices, UInt(prioBits.W)))
+      if (nPriorities > 0) RegInit(VecInit(Seq.fill(nDevices)(0.U(prioBits.W))))
       else WireDefault(VecInit.fill(nDevices max 1)(1.U))
     val threshold =
-      if (nPriorities > 0) Reg(Vec(nHarts, UInt(prioBits.W)))
+      if (nPriorities > 0) RegInit(VecInit(Seq.fill(nHarts)(0.U(prioBits.W))))
       else WireDefault(VecInit.fill(nHarts)(0.U))
     val pending = RegInit(VecInit.fill(nDevices max 1){false.B})
 

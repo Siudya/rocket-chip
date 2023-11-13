@@ -3,7 +3,7 @@
 package freechips.rocketchip.devices.tilelink
 
 import chisel3._
-import chisel3.util.ShiftRegister
+import chisel3.util.{Fill, ShiftRegister}
 import org.chipsalliance.cde.config.{Field, Parameters}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
@@ -69,8 +69,9 @@ class CLINT(params: CLINTParams, beatBytes: Int)(implicit p: Parameters) extends
     val time = RegInit(0.U(timeWidth.W))
     when (io.rtcTick) { time := time + 1.U }
 
+    val timecmpResetVal = (-1).S(timeWidth.W).asUInt
     val nTiles = intnode.out.size
-    val timecmp = Seq.fill(nTiles) { Reg(UInt(timeWidth.W)) }
+    val timecmp = RegInit(VecInit(Seq.fill(nTiles)(timecmpResetVal)))
     val ipi = Seq.fill(nTiles) { RegInit(0.U(1.W)) }
 
     val (intnode_out, _) = intnode.out.unzip
