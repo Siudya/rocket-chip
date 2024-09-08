@@ -1037,7 +1037,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   val coreMonitorBundle = Wire(new CoreMonitorBundle(xLen, fLen))
 
   coreMonitorBundle.clock := clock
-  coreMonitorBundle.reset := reset
+  coreMonitorBundle.reset := reset.asBool
   coreMonitorBundle.hartid := io.hartid
   coreMonitorBundle.timer := csr.io.time(31,0)
   coreMonitorBundle.valid := csr.io.trace(0).valid && !csr.io.trace(0).exception
@@ -1100,7 +1100,7 @@ class Rocket(tile: RocketTile)(implicit p: Parameters) extends CoreModule()(p)
   val xrfWriteBundle = Wire(new CoreMonitorBundle(xLen, fLen))
 
   xrfWriteBundle.clock := clock
-  xrfWriteBundle.reset := reset
+  xrfWriteBundle.reset := reset.asBool
   xrfWriteBundle.hartid := io.hartid
   xrfWriteBundle.timer := csr.io.time(31,0)
   xrfWriteBundle.valid := false.B

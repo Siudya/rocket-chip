@@ -654,7 +654,7 @@ class DataArray(implicit p: Parameters) extends L1HellaCacheModule()(p) {
       val resp = Wire(Vec(rowWords, Bits(encRowBits.W)))
       val r_raddr = RegEnable(io.read.bits.addr, io.read.valid)
       for (i <- 0 until resp.size) {
-        val array  = DescribedSRAM(
+        val array  = xs.utils.sram.DftSRAM(
           name = s"array_${w}_${i}",
           desc = "Non-blocking DCache Data Array",
           size = nSets * refillCycles,
@@ -676,7 +676,7 @@ class DataArray(implicit p: Parameters) extends L1HellaCacheModule()(p) {
     }
   } else {
     for (w <- 0 until nWays) {
-      val array  = DescribedSRAM(
+      val array  = xs.utils.sram.DftSRAM(
         name = s"array_${w}",
         desc = "Non-blocking DCache Data Array",
         size = nSets * refillCycles,
@@ -803,6 +803,7 @@ class NonBlockingDCacheModule(outer: NonBlockingDCache) extends HellaCacheModule
 
   // data
   val data = Module(new DataArray)
+  xs.utils.mbist.MbistPipeline.PlaceMbistPipeline(1, "DcacheMbistPipeline")
   val readArb = Module(new Arbiter(new L1DataReadReq, 4))
   val writeArb = Module(new Arbiter(new L1DataWriteReq, 2))
   data.io.write.valid := writeArb.io.out.valid

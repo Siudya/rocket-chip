@@ -423,13 +423,13 @@ class PTW(n: Int)(implicit edge: TLEdgeOut, p: Parameters) extends CoreModule()(
 
     val l2_plru = new SetAssocLRU(nL2TLBSets, coreParams.nL2TLBWays, "plru")
 
-    val ram =  DescribedSRAM(
+    val ram =  xs.utils.sram.DftSRAM(
       name = "l2_tlb_ram",
       desc = "L2 TLB",
       size = nL2TLBSets,
       data = Vec(coreParams.nL2TLBWays, UInt(code.width(new L2TLBEntry(nL2TLBSets).getWidth).W))
     )
-
+    xs.utils.mbist.MbistPipeline.PlaceMbistPipeline(1, "PtwMbistPipeline")
     val g = Reg(Vec(coreParams.nL2TLBWays, UInt(nL2TLBSets.W)))
     val valid = RegInit(VecInit(Seq.fill(coreParams.nL2TLBWays)(0.U(nL2TLBSets.W))))
     // use r_req to construct tag

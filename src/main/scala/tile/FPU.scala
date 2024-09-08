@@ -781,7 +781,7 @@ class FPU(cfg: FPUParams)(implicit p: Parameters) extends FPUModule()(p) {
   val frfWriteBundle = Seq.fill(2)(WireInit(new CoreMonitorBundle(xLen, fLen), DontCare))
   frfWriteBundle.foreach { i =>
     i.clock := clock
-    i.reset := reset
+    i.reset := reset.asBool
     i.hartid := io.hartid
     i.timer := io.time(31,0)
     i.valid := false.B

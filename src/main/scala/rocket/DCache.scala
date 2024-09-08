@@ -51,7 +51,7 @@ class DCacheDataArray(implicit p: Parameters) extends L1HellaCacheModule()(p) {
   val addr = io.req.bits.addr >> rowOffBits
   val data_arrays = Seq.tabulate(rowBits / subWordBits) {
     i =>
-      DescribedSRAM(
+      xs.utils.sram.DftSRAM(
         name = s"data_arrays_${i}",
         desc = "DCache Data Array",
         size = nSets * cacheBlockBytes / rowBytes,
@@ -117,7 +117,7 @@ class DCacheModule(outer: DCache) extends HellaCacheModule(outer) {
   val replacer = ReplacementPolicy.fromString(cacheParams.replacementPolicy, nWays)
   val metaArb = Module(new Arbiter(new DCacheMetadataReq, 8) with InlineInstance)
 
-  val tag_array = DescribedSRAM(
+  val tag_array = xs.utils.sram.DftSRAM(
     name = "tag_array",
     desc = "DCache Tag Array",
     size = nSets,
@@ -126,6 +126,7 @@ class DCacheModule(outer: DCache) extends HellaCacheModule(outer) {
 
   // data
   val data = Module(new DCacheDataArray)
+  xs.utils.mbist.MbistPipeline.PlaceMbistPipeline(1, "DcacheMbistPipeline")
   val dataArb = Module(new Arbiter(new DCacheDataReq, 4) with InlineInstance)
   dataArb.io.in.tail.foreach(_.bits.wdata := dataArb.io.in.head.bits.wdata) // tie off write ports by default
   data.io.req.bits <> dataArb.io.out.bits

@@ -110,7 +110,8 @@ class FrontendModule(outer: Frontend) extends LazyModuleImp(outer)
   s1_valid := s0_valid
   val s1_pc = Reg(UInt(vaddrBitsExtended.W))
   val s1_speculative = Reg(Bool())
-  val s2_pc = RegInit(t = UInt(vaddrBitsExtended.W), alignPC(io_reset_vector))
+  val resetReg = RegNext(false.B, true.B)
+  val s2_pc = withReset(resetReg){RegInit(t = UInt(vaddrBitsExtended.W), alignPC(io_reset_vector))}
   val s2_btb_resp_valid = if (usingBTB) Reg(Bool()) else false.B
   val s2_btb_resp_bits = Reg(new BTBResp)
   val s2_btb_taken = s2_btb_resp_valid && s2_btb_resp_bits.taken

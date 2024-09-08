@@ -409,7 +409,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 /**  Tag SRAM, indexed with virtual memory,
  *   content with `refillError ## tag[19:0]` after ECC
  * */
-  val tag_array  = DescribedSRAM(
+  val tag_array  = xs.utils.sram.DftSRAM(
     name = "tag_array",
     desc = "ICache Tag Array",
     size = nSets,
@@ -543,14 +543,14 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     */
   val data_arrays = Seq.tabulate(tl_out.d.bits.data.getWidth / wordBits) {
     i =>
-      DescribedSRAM(
+      xs.utils.sram.DftSRAM(
         name = s"data_arrays_${i}",
         desc = "ICache Data Array",
         size = nSets * refillCycles,
         data = Vec(nWays, UInt(dECC.width(wordBits).W))
       )
   }
-
+  xs.utils.mbist.MbistPipeline.PlaceMbistPipeline(1, "IcacheMbistPipeline")
   for ((data_array , i) <- data_arrays.zipWithIndex) {
     /**  bank match (vaddr[2]) */
     def wordMatch(addr: UInt) = addr.extract(log2Ceil(tl_out.d.bits.data.getWidth/8)-1, log2Ceil(wordBits/8)) === i.U
